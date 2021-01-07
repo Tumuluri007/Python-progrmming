@@ -1,0 +1,1 @@
+In my 4th year in BITS-Pilani Dubai I have done a credited course in Data Science where they gave a project to create, Hence I created and implemented a project called Sentiment For Movie Analysis using Machine Learning Algorithms and using Python Programming. 
