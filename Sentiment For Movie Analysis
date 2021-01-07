@@ -1,0 +1,347 @@
+from tkinter import messagebox
+from tkinter import *
+from tkinter.filedialog import askopenfilename
+from tkinter import simpledialog
+import tkinter
+import numpy as np
+from tkinter import filedialog
+import pandas as pd
+from nltk.corpus import stopwords
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
+import os
+from nltk.tokenize import TreebankWordTokenizer
+from nltk.stem import WordNetLemmatizer
+from sklearn.preprocessing import LabelEncoder
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report
+from sklearn.metrics import confusion_matrix
+from sklearn.metrics import accuracy_score
+from sklearn.model_selection import GridSearchCV
+from sklearn.metrics import roc_curve, roc_auc_score
+import seaborn as sns
+from sklearn.ensemble import RandomForestClassifier
+
+from sklearn.model_selection import KFold
+from sklearn import svm
+from sklearn.model_selection import StratifiedKFold
+from sklearn.feature_selection import SelectKBest, chi2
+from sklearn.metrics import accuracy_score
+from sklearn.decomposition import PCA
+from sklearn.ensemble import GradientBoostingClassifier
+import webbrowser
+import matplotlib
+matplotlib.use("TkAgg")
+import matplotlib.pyplot as plt
+
+main = tkinter.Tk()
+main.title("Experiment with Machine Learning Algorithms")
+main.geometry("1300x1200")
+
+global filename
+stopWords = set(stopwords.words('english'))
+word_tokenizer = TreebankWordTokenizer()
+word_lemmatizer = WordNetLemmatizer()
+specialSymbols = "1234567890~`!@#$%^&*()_-+={[}]|\:;'<,>.?/"
+
+def preprocess(reviews_dataset):
+    for k in range(reviews_dataset.shape[0]):
+        reviews_dataset["reviews"][k] = word_tokenizer.tokenize(reviews_dataset["reviews"][k])
+    
+    for k in range(reviews_dataset.shape[0]):
+        reviews_dataset["reviews"][k] = ([word.lower() for word in reviews_dataset["reviews"][k] if word not in stopWords])
+
+    for k in range(reviews_dataset.shape[0]):
+        reviews_dataset.reviews[k] = " ".join([word_lemmatizer.lemmatize(word) for word in reviews_dataset.reviews[k]]).strip()
+    
+    for k in range(reviews_dataset.shape[0]):
+        reviews_dataset.reviews[k] = "".join([chars for chars in reviews_dataset.reviews[k] if chars not in specialSymbols])
+    return reviews_dataset    
+
+def uploadReviews():
+    global filename
+    filename = filedialog.askopenfilename(initialdir = "dataset")
+    pathlabel.config(text=filename)
+    text.delete('1.0', END)
+    text.insert(END,'Movie Reviews dataset loaded\n')
+
+def runExperiment4():
+    text.delete('1.0', END)
+    reviews_dataset = pd.read_csv(filename,nrows=3000)
+    reviews_dataset = preprocess(reviews_dataset)
+    text.insert(END,'Total reviews found in dataset : '+str(len(reviews_dataset))+"\n")
+    tfidf_vector = TfidfVectorizer(min_df=2, max_df=0.5, ngram_range=(1,2))
+    tfidf_vector.fit(reviews_dataset["reviews"])
+    featuresData = tfidf_vector.transform(reviews_dataset["reviews"])
+    X = pd.DataFrame(featuresData.todense(), columns = tfidf_vector.get_feature_names())
+    le = LabelEncoder()
+    Y = le.fit_transform(reviews_dataset["sentiment"])
+    text.insert(END,'Total words found in dataset : '+str(X.shape[1])+"\n")
+    X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size = 0.1, random_state = 0)
+    cls = LogisticRegression(random_state=0, solver='lbfgs')
+    gridValues = {'penalty': ['l2'], 'C': [0.05]}
+    classifier = GridSearchCV(cls, param_grid=gridValues)
+    classifier.fit(X_train,y_train)
+    predict = classifier.predict(X_test)
+    cm = confusion_matrix(y_test, predict)
+    accuracy = accuracy_score(y_test,predict)
+    report = classification_report(y_test, predict)
+    text.insert(END,'Logistic Regression Accuracy : '+str(accuracy)+"\n")
+    text.insert(END,'Confusion Matrix\n')
+    text.insert(END,str(cm)+"\n")
+    text.insert(END,'Classification Report\n');
+    text.insert(END,str(report)+"\n")
+    score = classifier.predict_proba(X_test)[:,1]
+    fpr, tpr, th = roc_curve(y_test, score)
+    plt.subplots(1, figsize=(10,10))
+    plt.title('Logistic Regression Movie Reviews')
+    plt.plot(fpr, tpr)
+    plt.plot([0, 1], ls="--")
+    plt.plot([0, 0], [1, 0] , c=".7"), plt.plot([1, 1] , c=".7")
+    plt.ylabel('True Positive Rate')
+    plt.xlabel('False Positive Rate')
+    plt.show()
+    sns.heatmap(cm/np.sum(cm), annot=True, fmt='.2%', cmap='Blues')
+    plt.show()
+
+    topWords = X.sum(axis=0) 
+    topWords = topWords.sort_values(ascending=False)
+    words = []
+    counts = []
+    index = 0
+    for word, count in topWords.items():
+        if index < 10:
+            if word not in stopWords:
+                words.append(word)
+                counts.append(count)
+                index = index + 1
+        else:
+            break
+    
+    y_pos = np.arange(len(words))
+    plt.bar(y_pos, counts)
+    plt.xticks(y_pos, words)
+    plt.show()    
+    
+    X['sentimentlabel'] = Y
+
+    top_positive = X.loc[X['sentimentlabel'] == 0].sum(axis=0)
+    top_negative =X.loc[X['sentimentlabel'] == 1].sum(axis=0)
+
+    top_pos = []
+    pos_count = []
+    index = 0
+    for word, count in top_positive.items():
+        if index < 10:
+            if word not in stopWords:
+                top_pos.append(word)
+                pos_count.append(count)
+                index = index + 1
+        else:
+            break
+    
+    y_pos = np.arange(len(top_pos))
+    plt.bar(y_pos, pos_count)
+    plt.xticks(y_pos, top_pos)
+    plt.show()   
+    
+    top_neg = []
+    neg_count = []
+    index = 0
+    for word, count in top_negative.items():
+        if index < 10:
+            if word not in stopWords and word not in top_pos:
+                top_neg.append(word)
+                neg_count.append(count)
+                index = index + 1
+        else:
+            break
+    
+    y_pos = np.arange(len(top_neg))
+    plt.bar(y_pos, neg_count)
+    plt.xticks(y_pos, top_neg)
+    plt.show() 
+    
+def uploadChurn():
+    global filename
+    filename = filedialog.askopenfilename(initialdir = "dataset")
+    pathlabel.config(text=filename)
+    text.delete('1.0', END)
+    text.insert(END,'BigML Telecom Churn dataset loaded\n')
+
+
+def runExperiment5():
+    text.delete('1.0', END)
+    dataset = pd.read_csv(filename)
+    le = LabelEncoder()
+    dataset['State'] = pd.Series(le.fit_transform(dataset['State']))
+    dataset['International plan'] = pd.Series(le.fit_transform(dataset['International plan']))
+    dataset['Voice mail plan'] = pd.Series(le.fit_transform(dataset['Voice mail plan']))
+    dataset['Churn'] = pd.Series(le.fit_transform(dataset['Churn']))
+    X = dataset.values[:, 0:18]
+    Y = dataset.values[:, 19]
+
+    cv_fold = StratifiedKFold(n_splits=5, shuffle=True, random_state=1)
+    for train_index, test_index in cv_fold.split(X, Y):
+        X_train, X_test= X[train_index], X[test_index]
+        y_train, y_test= Y[train_index], Y[test_index]
+
+
+    cls = svm.SVC(C=2.0,gamma='scale',kernel = 'rbf', random_state = 2)
+    cls.fit(X_train,y_train)
+    predict = cls.predict(X_test)
+    accuracy1 = accuracy_score(y_test,predict)
+
+    cls = LogisticRegression(random_state=0, solver='lbfgs')
+    cls.fit(X_train,y_train)
+    predict = cls.predict(X_test)
+    accuracy2 = accuracy_score(y_test,predict)
+
+    cls = RandomForestClassifier()
+    cls.fit(X_train,y_train)
+    predict = cls.predict(X_test)
+    accuracy3 = accuracy_score(y_test,predict)
+
+    cls = GradientBoostingClassifier()
+    cls.fit(X_train,y_train)
+    predict = cls.predict(X_test)
+    accuracy4 = accuracy_score(y_test,predict)
+    
+    fs = SelectKBest(chi2, k=4)
+    X = fs.fit_transform(X,Y)
+    print(X.shape)
+    for train_index, test_index in cv_fold.split(X, Y):
+        X_train, X_test= X[train_index], X[test_index]
+        y_train, y_test= Y[train_index], Y[test_index]
+
+    cls = svm.SVC(C=2.0,gamma='scale',kernel = 'rbf', random_state = 2)
+    cls.fit(X_train,y_train)
+    predict = cls.predict(X_test)
+    accuracy5 = accuracy_score(y_test,predict)
+
+    cls = LogisticRegression(random_state=0, solver='lbfgs')
+    cls.fit(X_train,y_train)
+    predict = cls.predict(X_test)
+    accuracy6 = accuracy_score(y_test,predict)
+
+    cls = RandomForestClassifier()
+    cls.fit(X_train,y_train)
+    predict = cls.predict(X_test)
+    accuracy7 = accuracy_score(y_test,predict)
+
+    cls = GradientBoostingClassifier()
+    cls.fit(X_train,y_train)
+    predict = cls.predict(X_test)
+    accuracy8 = accuracy_score(y_test,predict)
+
+
+    pca = PCA(n_components = 2, random_state = 0)
+    pca_data = pd.DataFrame(pca.fit_transform(X))
+
+    cols = pca_data.shape[1]
+    c2 = cols - 1
+    print(pca_data.head)
+    XX = pca_data.values[:, 0:c2] 
+    for train_index, test_index in cv_fold.split(XX, Y):
+        X_train, X_test= XX[train_index], XX[test_index]
+        y_train, y_test= Y[train_index], Y[test_index]
+
+    cls = svm.SVC(C=2.0,gamma='scale',kernel = 'rbf', random_state = 2)
+    cls.fit(X_train,y_train)
+    predict = cls.predict(X_test)
+    accuracy9 = accuracy_score(y_test,predict)
+
+    cls = LogisticRegression(random_state=0, solver='lbfgs')
+    cls.fit(X_train,y_train)
+    predict = cls.predict(X_test)
+    accuracy10 = accuracy_score(y_test,predict)
+
+    cls = RandomForestClassifier()
+    cls.fit(X_train,y_train)
+    predict = cls.predict(X_test)
+    accuracy11 = accuracy_score(y_test,predict)
+
+    cls = GradientBoostingClassifier()
+    cls.fit(X_train,y_train)
+    predict = cls.predict(X_test)
+    accuracy12 = accuracy_score(y_test,predict)
+
+    text.insert(END,'SVC Normalized Accuracy  : '+str(accuracy1)+"\n")
+    text.insert(END,'SVC SelectKBest Accuracy : '+str(accuracy5)+"\n")
+    text.insert(END,'SVC PCA Accuracy         : '+str(accuracy9)+"\n")
+
+    text.insert(END,'LR Normalized Accuracy   : '+str(accuracy2)+"\n")
+    text.insert(END,'LR SelectKBest Accuracy  : '+str(accuracy6)+"\n")
+    text.insert(END,'LR PCA Accuracy          : '+str(accuracy10)+"\n")
+
+    text.insert(END,'RFC Normalized Accuracy  : '+str(accuracy3)+"\n")
+    text.insert(END,'RFC SelectKBest Accuracy : '+str(accuracy7)+"\n")
+    text.insert(END,'RFC PCA Accuracy         : '+str(accuracy11)+"\n")
+
+    text.insert(END,'XGB Normalized Accuracy  : '+str(accuracy4)+"\n")
+    text.insert(END,'XGB SelectKBest Accuracy : '+str(accuracy8)+"\n")
+    text.insert(END,'XGB PCA Accuracy         : '+str(accuracy12)+"\n")
+
+    table = '<html><body><center><table border=1><tr><th><font size=4 color=black>Algorithm Name</font></th>'
+    table+='<th><font size=4 color=black>Normalized Data</font></th>'
+    table+='<th><font size=4 color=black>Select K-Best</font></th>'
+    table+='<th><font size=4 color=black>PCA</font></th></tr>'
+    table+='<tr><td><font size=3 color=black>XGBoost</font></td><td><font size=3 color=black>'+str(accuracy4)+'</font></td>'
+    table+='<td><font size=3 color=black>'+str(accuracy8)+'</font></td><td><font size=3 color=black>'+str(accuracy12)+'</font></td>'
+
+    table+='<tr><td><font size=3 color=black>RFC</font></td><td><font size=3 color=black>'+str(accuracy3)+'</font></td>'
+    table+='<td><font size=3 color=black>'+str(accuracy7)+'</font></td><td><font size=3 color=black>'+str(accuracy11)+'</font></td>'
+    table+='<tr><td><font size=3 color=black>Logistic Regression</font></td><td><font size=3 color=black>'+str(accuracy2)+'</font></td>'
+    table+='<td><font size=3 color=black>'+str(accuracy6)+'</font></td><td><font size=3 color=black>'+str(accuracy10)+'</font></td>'
+    table+='<tr><td><font size=3 color=black>SVC</font></td><td><font size=3 color=black>'+str(accuracy1)+'</font></td>'
+    table+='<td><font size=3 color=black>'+str(accuracy5)+'</font></td><td><font size=3 color=black>'+str(accuracy9)+'</font></td>'
+    f = open("table.html", "w")
+    f.write(table)
+    f.close()
+
+def viewTable():
+    webbrowser.open("table.html",new=2)
+
+font = ('times', 16, 'bold')
+title = Label(main, text='Experiment with Machine Learning Algorithms')
+title.config(bg='dark goldenrod', fg='white')  
+title.config(font=font)           
+title.config(height=3, width=120)       
+title.place(x=0,y=5)
+
+font1 = ('times', 14, 'bold')
+uploadreview = Button(main, text="Upload Sentiment Movie Reviews Dataset", command=uploadReviews)
+uploadreview.place(x=700,y=100)
+uploadreview.config(font=font1)  
+
+pathlabel = Label(main)
+pathlabel.config(bg='DarkOrange1', fg='white')  
+pathlabel.config(font=font1)           
+pathlabel.place(x=700,y=150)
+
+ex4Button = Button(main, text="Run Experimental Setup 4", command=runExperiment4)
+ex4Button.place(x=700,y=200)
+ex4Button.config(font=font1) 
+
+uploadchurnButton = Button(main, text="Upload BigML Churn Dataset", command=uploadChurn)
+uploadchurnButton.place(x=700,y=250)
+uploadchurnButton.config(font=font1) 
+
+ex5Button = Button(main, text="Run Experimental Setup 5", command=runExperiment5)
+ex5Button.place(x=700,y=300)
+ex5Button.config(font=font1)
+
+viewButton = Button(main, text="View Table Results", command=viewTable)
+viewButton.place(x=700,y=350)
+viewButton.config(font=font1)
+
+font1 = ('times', 12, 'bold')
+text=Text(main,height=30,width=80)
+scroll=Scrollbar(text)
+text.configure(yscrollcommand=scroll.set)
+text.place(x=10,y=100)
+text.config(font=font1)
+
+
+main.config(bg='turquoise')
+main.mainloop()
